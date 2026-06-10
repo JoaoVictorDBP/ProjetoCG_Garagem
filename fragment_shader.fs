@@ -7,9 +7,19 @@ in vec3 Normal;
 
 uniform sampler2D imagem;
 
+// Identifica se o objeto pertence ao ambiente externo (0)
+// ou ao ambiente interno (1). Essa informação é utilizada
+// no fragment shader para que as luzes de um ambiente não
+// afetem os objetos do outro ambiente.
+
 uniform int ambienteID; 
 
 // Fontes de Luz Externas (Carro)
+
+// Calcula a posição dos faróis em relação à posição e
+// orientação atual do carro, permitindo que a fonte
+// luminosa acompanhe a movimentação do veículo.
+
 uniform vec3 farolEsqPos;
 uniform vec3 farolDirPos;
 uniform vec3 farolColor;
@@ -21,10 +31,22 @@ uniform float cutOff;
 uniform float outerCutOff;
 
 // Fontes de Luz Internas (Garagem)
+
+// Fonte luminosa do ambiente interno (lâmpada do teto)
 uniform vec3 lampadaTetoPos;
 uniform vec3 lampadaTetoColor; 
 uniform vec3 segundaLuzPos;    
 uniform vec3 segundaLuzColor;  
+
+uniform vec3 lampadaTetoDir;
+uniform vec3 segundaLuzDir;
+
+// Segunda fonte luminosa do ambiente interno (lanterna)
+uniform float cutOffInternoLampada;
+uniform float outerCutOffInternoLampada;
+
+uniform float cutOffInternoLanterna;
+uniform float outerCutOffInternoLanterna;
 
 uniform vec3 viewPos;
 
@@ -32,7 +54,13 @@ uniform float globalAmbientStrength;
 uniform float globalDiffuseStrength;
 uniform float globalSpecularStrength;
 
+
+// Fonte luminosa do ambiente externo (poste)
 uniform bool postesOn;
+
+// Parâmetros de material definidos manualmente para cada
+// objeto da cena. Não são utilizados valores provenientes
+// de arquivos .mtl, conforme exigido pelo projeto.
 
 uniform float matAmbient;
 uniform float matDiffuse;
@@ -45,6 +73,46 @@ float calculaSpotlight(vec3 lightPos, vec3 lightDirSpot, vec3 fragPos)
     float theta = dot(dirToFrag, normalize(lightDirSpot));
     float epsilon = cutOff - outerCutOff;
     return clamp((theta - outerCutOff) / epsilon, 0.0, 1.0);
+}
+
+float calculaSpotlightInternoLampada(
+    vec3 lightPos,
+    vec3 lightDirSpot,
+    vec3 fragPos)
+{
+    vec3 dirToFrag = normalize(fragPos - lightPos);
+
+    float theta =
+        dot(dirToFrag, normalize(lightDirSpot));
+
+    float epsilon =
+        cutOffInternoLampada - outerCutOffInternoLampada;
+
+    return clamp(
+        (theta - outerCutOffInternoLampada) / epsilon,
+        0.0,
+        1.0
+    );
+}
+
+float calculaSpotlightInternoLanterna(
+    vec3 lightPos,
+    vec3 lightDirSpot,
+    vec3 fragPos)
+{
+    vec3 dirToFrag = normalize(fragPos - lightPos);
+
+    float theta =
+        dot(dirToFrag, normalize(lightDirSpot));
+
+    float epsilon =
+        cutOffInternoLanterna - outerCutOffInternoLanterna;
+
+    return clamp(
+        (theta - outerCutOffInternoLanterna) / epsilon,
+        0.0,
+        1.0
+    );
 }
 
 void main()
@@ -103,7 +171,7 @@ void main()
 
         if(postesOn)
         {
-            vec3 corLuzPoste = vec3(1.0, 0.8, 0.45);
+            vec3 corLuzPoste = vec3(2.0, 1.6, 0.9);
 
             float posPostesX[6] = float[](5.0, 35.0, 65.0, -25.0, -55.0, -85.0);
             float posPostesZ[1] = float[](12.5);
@@ -173,31 +241,35 @@ void main()
         totalAmbient = globalAmbientStrength * matAmbient * vec3(1.0, 1.0, 1.0);
 
         // --- LÂMPADA DO TETO ---
-        float distTeto = length(lampadaTetoPos - FragPos);
-        float attTeto = 1.0 / (1.0 + 0.05 * distTeto + 0.01 * (distTeto * distTeto));
+        float distTeto =length(lampadaTetoPos - FragPos);
+        float attTeto =1.0 /(1.0 + 0.05 * distTeto +0.01 * (distTeto * distTeto));
 
-        vec3 lightDirTeto = normalize(lampadaTetoPos - FragPos);
-        float diffTeto = abs(dot(norm, lightDirTeto));
+        vec3 lightDirTeto =normalize(lampadaTetoPos - FragPos);
+        float diffTeto =max(dot(norm, lightDirTeto), 0.0);
+        float spotTeto =calculaSpotlightInternoLampada(lampadaTetoPos,lampadaTetoDir,FragPos);
 
-        vec3 diffuseTeto = globalDiffuseStrength * matDiffuse * diffTeto * lampadaTetoColor * attTeto;
-        vec3 reflectDirTeto = reflect(-lightDirTeto, norm);
-        float specTeto = pow(max(dot(viewDir, reflectDirTeto), 0.0), matShininess);
-        vec3 specularTeto = globalSpecularStrength * matSpecular * specTeto * lampadaTetoColor * attTeto;
+        vec3 diffuseTeto =globalDiffuseStrength *matDiffuse *diffTeto *lampadaTetoColor *attTeto *spotTeto;
+        vec3 reflectDirTeto =reflect(-lightDirTeto, norm);
+
+        float specTeto =pow(max(dot(viewDir, reflectDirTeto), 0.0),matShininess);
+        vec3 specularTeto =globalSpecularStrength *matSpecular *specTeto *lampadaTetoColor *attTeto *spotTeto;
 
         // --- SEGUNDA LUZ INTERNA ---
-        float distSeg = length(segundaLuzPos - FragPos);
-        float attSeg = 1.0 / (1.0 + 0.08 * distSeg + 0.03 * (distSeg * distSeg));
+        float distSeg =length(segundaLuzPos - FragPos);
+        float attSeg =1.0 /(1.0 + 0.08 * distSeg +0.03 * (distSeg * distSeg));
 
-        vec3 lightDirSeg = normalize(segundaLuzPos - FragPos);
-        float diffSeg = abs(dot(norm, lightDirSeg));
+        vec3 lightDirSeg =normalize(segundaLuzPos - FragPos);
+        float diffSeg =max(dot(norm, lightDirSeg), 0.0);
+        float spotSeg =calculaSpotlightInternoLanterna(segundaLuzPos,segundaLuzDir,FragPos);
 
-        vec3 diffuseSeg = globalDiffuseStrength * matDiffuse * diffSeg * segundaLuzColor * attSeg;
-        vec3 reflectDirSeg = reflect(-lightDirSeg, norm);
-        float specSeg = pow(max(dot(viewDir, reflectDirSeg), 0.0), matShininess);
-        vec3 specularSeg = globalSpecularStrength * matSpecular * specSeg * segundaLuzColor * attSeg;
+        vec3 diffuseSeg =globalDiffuseStrength *matDiffuse *diffSeg *segundaLuzColor *attSeg *spotSeg;
+        vec3 reflectDirSeg =reflect(-lightDirSeg, norm);
 
-        totalDiffuse = diffuseTeto + diffuseSeg;
-        totalSpecular = specularTeto + specularSeg;
+        float specSeg =pow(max(dot(viewDir, reflectDirSeg), 0.0),matShininess);
+        vec3 specularSeg =globalSpecularStrength *matSpecular *specSeg *segundaLuzColor *attSeg *spotSeg;
+
+        totalDiffuse =diffuseTeto +diffuseSeg;
+        totalSpecular =specularTeto +specularSeg;
     }
 
     vec3 finalLight = totalAmbient + totalDiffuse + totalSpecular;
